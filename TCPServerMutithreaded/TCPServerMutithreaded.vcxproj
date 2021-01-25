@@ -111,14 +111,12 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="main.cpp" />
-    <ClCompile Include="Posts.cpp" />
     <ClCompile Include="RequestParser.cpp" />
     <ClCompile Include="TCPClient.cpp" />
     <ClCompile Include="TCPServer.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="config.h" />
-    <ClInclude Include="Posts.h" />
     <ClInclude Include="ReceivedSocketData.h" />
     <ClInclude Include="RequestParser.h" />
     <ClInclude Include="TCPClient.h" />

@@ -3,35 +3,33 @@
 #include <string>
 #include <thread>
 #include <vector>
+
 #include <map>
-#include <mutex>
-#include <shared_mutex>
 #include <iterator>
 #include <unordered_map>
 #include <shared_mutex>
 
-
 #include "config.h"
 #include "TCPServer.h"
-#include "RequestParser.h"
 #include "TCPClient.h"
-#include "Posts.h"
-
-
-std::mutex mu;
-std::shared_mutex mu2;
-
-int maxL = 140;
+#include "RequestParser.h"
 
 #define DEFAULT_PORT 12345
-
 bool terminateServer = false;
+void serverThreadFunction(TCPServer* server, ReceivedSocketData && data);
 
-void serverThreadFunction(TCPServer server, ReceivedSocketData && data);
-std::string parseRequest(std::string request);
+std::shared_mutex m_mutex;
+std::shared_mutex m_mutex2;
 std::unordered_map<std::string, std::vector<std::string>> umap;
+int maxL = 140;
+
+
+std::string parseRequest(std::string request);
 std::string handle_posts(PostRequest& post);
 std::string handle_Reads(ReadRequest& read);
+std::string handle_Count(CountRequest& count);
+std::string handle_List();
+
 
 int main()
 {
@@ -49,7 +47,7 @@ int main()
 
 		if (!terminateServer)
 		{
-			serverThreads.emplace_back(serverThreadFunction, server, receivedData);
+			serverThreads.emplace_back(serverThreadFunction, &server, receivedData);
 		}
 	}
 
@@ -61,48 +59,100 @@ int main()
 	return 0;
 }
 
+
+
 std::string handle_posts(PostRequest& post)
 {
-	//std::lock_guard<std::mutex> locker(mu2);
-	std::unique_lock<std::shared_mutex> locker(mu2);
-
-	if (post.getMessage().size() <= maxL && post.getTopicId().size() <= maxL)
+	std::unique_lock<std::shared_mutex> locker(m_mutex);
+	std::string Topic = post.getTopicId();
+	std::string Messg = post.getMessage();
+	if (Messg.size() > maxL)
 	{
-		if (umap.find(post.getTopicId()) != umap.end())
-		{
-			umap[post.getTopicId()].push_back(post.getMessage());
-			return std::to_string(umap[post.getTopicId()].size());
-		}
-		else
-		{
-			Posts P(post);
-			P.addPost();
-			umap.insert(std::pair<std::string, std::vector<std::string>>(P.tempPost.getTopicId(), P.post));
-			return std::to_string(umap[P.tempPost.getTopicId()].size());
-		}
+		Messg = Messg.substr(0, 140);
 	}
-	
+
+	if (Topic.size() > maxL)
+	{
+		Topic = Topic.substr(0, 140);
+	}
+
+	if (umap.find(Topic) != umap.end())
+	{
+		umap[Topic].push_back(Messg);
+		return std::to_string(umap[Topic].size() - 1);
+	}
+	else
+	{
+		std::vector<std::string> post;
+		post.push_back(Messg);
+		umap.insert(std::pair<std::string, std::vector<std::string>>(Topic, post));
+		return std::to_string(umap[Topic].size() - 1);
+	}
 	return std::to_string(0);
 }
 
 std::string handle_Reads(ReadRequest& read)
 {
-	//std::lock_guard<std::mutex> locker(mu2);
-	std::shared_lock<std::shared_mutex> locker(mu2);
-	if (read.getTopicId().size() <= maxL)
+	std::shared_lock<std::shared_mutex> locker(m_mutex);
+	std::string Topic = read.getTopicId();
+	if (Topic.size() <= maxL)
 	{
-		if (umap.find(read.getTopicId()) != umap.end())
+		if (umap.find(Topic) != umap.end())
 		{
 			auto temp = umap[read.getTopicId()];
 			if (read.getPostId() < temp.size())
 			{
-				return umap[read.getTopicId()][read.getPostId()];
+				return umap[Topic][read.getPostId()];
 			}
-			
+
 		}
+	}
+	else
+	{
+		Topic = Topic.substr(0, 140);
+
+		if (umap.find(Topic) != umap.end())
+		{
+			auto temp = umap[Topic];
+			if (read.getPostId() < temp.size())
+			{
+				return umap[Topic][read.getPostId()];
+			}
+		}
+
 	}
 	return "";
 }
+
+std::string handle_List()
+{
+	std::shared_lock<std::shared_mutex> locker(m_mutex);
+	std::vector<std::string> key;
+	std::string temp;
+	for (std::unordered_map<std::string, std::vector<std::string>>::iterator it = umap.begin(); it != umap.end(); ++it) {
+		key.push_back(it->first);
+	}
+	for (int i = 0; i < key.size(); i++)
+	{
+		temp += key[i] + "#";
+	}
+	return temp;
+}
+
+
+std::string handle_Count(CountRequest& count)
+{
+	std::shared_lock<std::shared_mutex> locker(m_mutex);
+	if (count.getTopicId().size() <= maxL)
+	{
+		if (umap.find(count.getTopicId()) != umap.end())
+		{
+			return std::to_string(umap[count.getTopicId()].size());
+		}
+	}
+	return "0";
+}
+
 
 std::string parseRequest(std::string request) {
 	PostRequest post = PostRequest::parse(request);
@@ -111,11 +161,11 @@ std::string parseRequest(std::string request) {
 	ReadRequest read = ReadRequest::parse(request);
 	if (read.valid) { return handle_Reads(read); }
 
-	/*CountRequest count = CountRequest::parse(request);
-	if (count.valid) { return count.getTopicId(); }
+	CountRequest count = CountRequest::parse(request);
+	if (count.valid) { return handle_Count(count); }
 
 	ListRequest list = ListRequest::parse(request);
-	if (list.valid) { return list.toString(); }*/
+	if (list.valid) { return handle_List(); }
 
 	ExitRequest exitReq = ExitRequest::parse(request);
 	if (exitReq.valid) { return exitReq.toString(); }
@@ -125,42 +175,25 @@ std::string parseRequest(std::string request) {
 	return "";
 }
 
-//std::string parseRequest(std::string request) {
-//	PostRequest post = PostRequest::parse(request);
-//	if (post.valid) { return post.getMessage(); }
-//
-//	ReadRequest read = ReadRequest::parse(request);
-//	if (read.valid) { return read.getTopicId(); }
-//
-//	CountRequest count = CountRequest::parse(request);
-//	if (count.valid) { return count.getTopicId(); }
-//
-//	ListRequest list = ListRequest::parse(request);
-//	if (list.valid) { return list.toString(); }
-//
-//	ExitRequest exitReq = ExitRequest::parse(request);
-//	if (exitReq.valid) { return exitReq.toString(); }
-//
-//	std::cout << "Unknown request: " << request << std::endl;
-//	std::cout << std::endl;
-//}
 
-void serverThreadFunction(TCPServer server, ReceivedSocketData && data)
+
+
+void serverThreadFunction(TCPServer* server, ReceivedSocketData && data)
 {
 	unsigned int socketIndex = data.ClientSocket;
 
 	do {
-		server.receiveData(data, 0);
+		server->receiveData(data, 0);
 
-		if (data.request != "" && data.request != "EXIT" )
+		if (data.request != "" && data.request != "EXIT")
 		{
 			data.reply = parseRequest(data.request);
-			server.sendReply(data);
+			server->sendReply(data);
 		}
 		else if (data.request == "EXIT")
 		{
 			data.reply = data.request;
-			server.sendReply(data);
+			server->sendReply(data);
 		}
 	} while (data.request != "EXIT" && !terminateServer);
 
@@ -169,10 +202,9 @@ void serverThreadFunction(TCPServer server, ReceivedSocketData && data)
 		terminateServer = true;
 
 		TCPClient tempClient(std::string("127.0.0.1"), DEFAULT_PORT);
-		
 		tempClient.OpenConnection();
 		tempClient.CloseConnection();
 	}
 
-	server.closeClientSocket(data);
+	server->closeClientSocket(data);
 }

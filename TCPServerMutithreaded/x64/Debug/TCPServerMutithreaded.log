@@ -1,0 +1,7 @@
+﻿  main.cpp
+D:\2020_21 computer science\Concurrent And Parallel Systems\Task 1 Final Sub\Libraries v3.0\Final Sub yes\Libraries v4.0\TCPServerMutithreaded\TCPServerMutithreaded\main.cpp(183,27): warning C4244: 'initializing': conversion from 'SOCKET' to 'unsigned int', possible loss of data
+  RequestParser.cpp
+  TCPClient.cpp
+  TCPServer.cpp
+  Generating Code...
+  TCPServerMutithreaded.vcxproj -> D:\2020_21 computer science\Concurrent And Parallel Systems\Task 1 Final Sub\Libraries v3.0\Final Sub yes\Libraries v4.0\TCPServerMutithreaded\x64\Debug\TCPServerMutithreaded.exe
