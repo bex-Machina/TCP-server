@@ -61,7 +61,7 @@ int main()
 
 
 
-std::string handle_posts(PostRequest& post)
+ std::string handle_posts(PostRequest& post)
 {
 	std::unique_lock<std::shared_mutex> locker(m_mutex);
 	std::string Topic = post.getTopicId();
@@ -91,7 +91,7 @@ std::string handle_posts(PostRequest& post)
 	return std::to_string(0);
 }
 
-std::string handle_Reads(ReadRequest& read)
+ std::string handle_Reads(ReadRequest& read)
 {
 	std::shared_lock<std::shared_mutex> locker(m_mutex);
 	std::string Topic = read.getTopicId();
